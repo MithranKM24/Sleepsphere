@@ -3,7 +3,7 @@ import { Moon, Save, Calendar, Trash2, History } from 'lucide-react';
 import { supabase, SleepLog } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { validateSleepLog, getErrorMessage } from '../lib/validation';
-import { ErrorBanner, EmptyState, FormMessage, LoadingSkeleton } from './ui';
+import { ChipRow, ErrorBanner, EmptyState, FormMessage, LoadingSkeleton, QualityFaces } from './ui';
 
 const DREAM_MOODS = ['Happy', 'Anxious', 'Fearful', 'Peaceful', 'Excited', 'Sad', 'Confused', 'Neutral'];
 const DREAM_TYPES = ['Normal', 'Lucid', 'Recurring', 'Nightmare', 'Vivid', 'Fragment'];
@@ -19,6 +19,7 @@ export default function SleepLogCard() {
   const [errors, setErrors] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dreamRemembered, setDreamRemembered] = useState(false);
 
   const [formData, setFormData] = useState({
     bedtime: '',
@@ -108,6 +109,12 @@ export default function SleepLogCard() {
         dream_vividness: log.dream_vividness?.toString() || '3',
         awakenings: log.awakenings?.toString() || '0'
       });
+      setDreamRemembered(
+        Boolean(log.dream_recall_frequency && log.dream_recall_frequency > 0) ||
+          Boolean(log.dream_description) ||
+          Boolean(log.dream_mood) ||
+          Boolean(log.dream_type)
+      );
     } else {
       setFormData({
         bedtime: '',
@@ -121,6 +128,7 @@ export default function SleepLogCard() {
         dream_vividness: '3',
         awakenings: '0'
       });
+      setDreamRemembered(false);
     }
   };
 
@@ -315,22 +323,11 @@ export default function SleepLogCard() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-dark-text-secondary mb-1">
-              Sleep Quality (1-10)
-            </label>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min="1"
-                max="10"
-                value={formData.sleep_quality}
-                onChange={(e) => setFormData({ ...formData, sleep_quality: e.target.value })}
-                className="flex-1 accent-dark-accent-light"
-              />
-              <span className="text-lg font-semibold text-dark-accent-light w-8 text-center">
-                {formData.sleep_quality}
-              </span>
-            </div>
+            <QualityFaces
+              value={formData.sleep_quality ? parseInt(formData.sleep_quality, 10) : undefined}
+              onChange={(v) => setFormData({ ...formData, sleep_quality: v !== undefined ? String(v) : '' })}
+              label="How was your sleep?"
+            />
           </div>
 
           <div>
@@ -350,6 +347,23 @@ export default function SleepLogCard() {
         <div className="border-t pt-4">
           <h3 className="text-lg font-semibold text-dark-text mb-3">Dream Details</h3>
 
+          <ChipRow
+            options={[
+              { label: 'No', value: 'no' },
+              { label: 'Yes, I remember one', value: 'yes' }
+            ]}
+            value={dreamRemembered ? 'yes' : 'no'}
+            onChange={(v) => setDreamRemembered(v === 'yes')}
+            label="Did you remember a dream?"
+          />
+          <p className="text-xs text-dark-text-muted -mt-1">
+            {dreamRemembered
+              ? 'Great — add a few quick details below. Everything is optional.'
+              : 'No dream details needed then — that keeps logging fast.'}
+          </p>
+
+          {dreamRemembered && (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
             <label className="block text-sm font-medium text-dark-text-secondary mb-1">
@@ -387,35 +401,23 @@ export default function SleepLogCard() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-            <label className="block text-sm font-medium text-dark-text-secondary mb-1">
-              Dream Mood
-            </label>
-            <select
+            <ChipRow
+              options={DREAM_MOODS.map(mood => ({ label: mood, value: mood }))}
               value={formData.dream_mood}
-              onChange={(e) => setFormData({ ...formData, dream_mood: e.target.value })}
-              className="w-full px-3 py-2 bg-dark-tertiary border border-dark-border rounded-lg focus:outline-none focus:ring-2 focus:ring-dark-accent-light text-dark-text"
-              >
-                <option value="">Select mood...</option>
-                {DREAM_MOODS.map(mood => (
-                  <option key={mood} value={mood}>{mood}</option>
-                ))}
-              </select>
+              onChange={(v) => setFormData({ ...formData, dream_mood: v })}
+              label="Dream Mood"
+              clearable
+            />
             </div>
 
             <div>
-            <label className="block text-sm font-medium text-dark-text-secondary mb-1">
-              Dream Type
-            </label>
-            <select
+            <ChipRow
+              options={DREAM_TYPES.map(type => ({ label: type, value: type }))}
               value={formData.dream_type}
-              onChange={(e) => setFormData({ ...formData, dream_type: e.target.value })}
-              className="w-full px-3 py-2 bg-dark-tertiary border border-dark-border rounded-lg focus:outline-none focus:ring-2 focus:ring-dark-accent-light text-dark-text"
-              >
-                <option value="">Select type...</option>
-                {DREAM_TYPES.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
+              onChange={(v) => setFormData({ ...formData, dream_type: v })}
+              label="Dream Type"
+              clearable
+            />
             </div>
           </div>
 
@@ -431,6 +433,8 @@ export default function SleepLogCard() {
               placeholder="Describe your dream in detail..."
             />
           </div>
+          </>
+          )}
         </div>
 
         {message && <FormMessage message={message} />}

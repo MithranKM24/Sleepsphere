@@ -3,7 +3,7 @@ import { Activity, Save, Calendar, Trash2, History } from 'lucide-react';
 import { supabase, LifestyleLog } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { validateLifestyleLog, getErrorMessage } from '../lib/validation';
-import { ErrorBanner, EmptyState, FormMessage, LoadingSkeleton } from './ui';
+import { ChipRow, ErrorBanner, EmptyState, FormMessage, LoadingSkeleton } from './ui';
 
 const EXERCISE_INTENSITIES = ['Low', 'Moderate', 'High'];
 const NOISE_LEVELS = ['Quiet', 'Moderate', 'Loud'];
@@ -263,19 +263,13 @@ export default function LifestyleLogCard() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-dark-text-secondary mb-1">
-                Exercise Intensity
-              </label>
-              <select
+              <ChipRow
+                options={EXERCISE_INTENSITIES.map(intensity => ({ label: intensity, value: intensity }))}
                 value={formData.exercise_intensity}
-                onChange={(e) => setFormData({ ...formData, exercise_intensity: e.target.value })}
-                className="w-full px-3 py-2 bg-dark-tertiary border border-dark-border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-dark-text"
-              >
-                <option value="">Select intensity...</option>
-                {EXERCISE_INTENSITIES.map(intensity => (
-                  <option key={intensity} value={intensity}>{intensity}</option>
-                ))}
-              </select>
+                onChange={(v) => setFormData({ ...formData, exercise_intensity: v })}
+                label="Exercise Intensity"
+                clearable
+              />
             </div>
           </div>
         </div>
@@ -356,35 +350,23 @@ export default function LifestyleLogCard() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-dark-text-secondary mb-1">
-                Noise Level
-              </label>
-              <select
+              <ChipRow
+                options={NOISE_LEVELS.map(level => ({ label: level, value: level }))}
                 value={formData.noise_level}
-                onChange={(e) => setFormData({ ...formData, noise_level: e.target.value })}
-                className="w-full px-3 py-2 bg-dark-tertiary border border-dark-border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-dark-text"
-              >
-                <option value="">Select level...</option>
-                {NOISE_LEVELS.map(level => (
-                  <option key={level} value={level}>{level}</option>
-                ))}
-              </select>
+                onChange={(v) => setFormData({ ...formData, noise_level: v })}
+                label="Noise Level"
+                clearable
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-dark-text-secondary mb-1">
-                Light Level
-              </label>
-              <select
+              <ChipRow
+                options={LIGHT_LEVELS.map(level => ({ label: level, value: level }))}
                 value={formData.light_level}
-                onChange={(e) => setFormData({ ...formData, light_level: e.target.value })}
-                className="w-full px-3 py-2 bg-dark-tertiary border border-dark-border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-dark-text"
-              >
-                <option value="">Select level...</option>
-                {LIGHT_LEVELS.map(level => (
-                  <option key={level} value={level}>{level}</option>
-                ))}
-              </select>
+                onChange={(v) => setFormData({ ...formData, light_level: v })}
+                label="Light Level"
+                clearable
+              />
             </div>
           </div>
         </div>
