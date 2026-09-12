@@ -6,7 +6,7 @@ import SleepLogCard from './components/SleepLog';
 import LifestyleLogCard from './components/LifestyleLog';
 import Analytics from './components/Analytics';
 import HealthAlerts from './components/HealthAlerts';
-import { Moon, User, FileText, Activity, BarChart3, AlertTriangle, LogOut } from 'lucide-react';
+import { Moon, User, Activity, BarChart3, AlertTriangle, LogOut } from 'lucide-react';
 
 type Tab = 'profile' | 'sleep' | 'lifestyle' | 'analytics' | 'health';
 

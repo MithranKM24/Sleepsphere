@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { SleepLog } from '../lib/supabase';
+import { useState, useEffect } from 'react';
+import { SleepLog, LifestyleLog } from '../lib/supabase';
 
 interface LineGraphProps {
   data: SleepLog[];
   metric: 'duration' | 'quality' | 'dreams' | 'stress';
-  lifestyleLogs?: any[];
+  lifestyleLogs?: LifestyleLog[];
   width?: number;
   height?: number;
   className?: string;
@@ -33,7 +33,7 @@ export default function LineGraph({
     return () => clearTimeout(timer);
   }, [data]);
 
-  const getMetricValue = (log: SleepLog, lifestyleLog?: any): number => {
+  const getMetricValue = (log: SleepLog, lifestyleLog?: LifestyleLog): number => {
     switch (metric) {
       case 'duration':
         return log.total_hours || 0;
@@ -142,7 +142,6 @@ export default function LineGraph({
     return path;
   };
 
-  const pathData = createPath(points);
   const animatedPathData = createPath(
     points.map(point => ({
       ...point,

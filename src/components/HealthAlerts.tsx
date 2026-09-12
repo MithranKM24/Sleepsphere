@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { AlertTriangle, Info, Heart, Brain, Clock, Zap, TrendingUp, TrendingDown } from 'lucide-react';
 import { supabase, SleepLog, LifestyleLog } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { getErrorMessage } from '../lib/validation';
 
 interface HealthAlert {
   id: string;
@@ -18,15 +19,19 @@ export default function HealthAlerts() {
   const { user } = useAuth();
   const [alerts, setAlerts] = useState<HealthAlert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [healthScore, setHealthScore] = useState<number | null>(null);
 
   useEffect(() => {
-    analyzeHealthPatterns();
-  }, [user]);
+    void analyzeHealthPatterns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
-  const analyzeHealthPatterns = async () => {
+  const analyzeHealthPatterns = useCallback(async () => {
     if (!user) return;
 
     setLoading(true);
+    setLoadError('');
     try {
       const fourWeeksAgo = new Date();
       fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
@@ -53,15 +58,19 @@ export default function HealthAlerts() {
 
       if (sleepResult.data && sleepResult.data.length > 0) {
         detectedAlerts.push(...detectSleepIssues(sleepResult.data, lifestyleResult.data || []));
+        setHealthScore(calculateHealthScore(sleepResult.data, lifestyleResult.data || []));
+      } else {
+        setHealthScore(null);
       }
 
       setAlerts(detectedAlerts);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error analyzing health patterns:', error);
+      setLoadError(getErrorMessage(error, 'Could not analyze your health patterns.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   const detectSleepIssues = (sleepLogs: SleepLog[], lifestyleLogs: LifestyleLog[]): HealthAlert[] => {
     const issues: HealthAlert[] = [];
@@ -187,7 +196,6 @@ export default function HealthAlerts() {
     }
 
     // Dream Analysis
-    const nightmareCount = sleepLogs.filter(log => log.dream_type === 'Nightmare').length;
     const recentNightmares = sleepLogs.filter(
       log => log.dream_type === 'Nightmare' &&
              new Date(log.log_date) >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -320,11 +328,27 @@ export default function HealthAlerts() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-6 border border-slate-200">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-slate-200 rounded w-1/3"></div>
-          <div className="h-20 bg-slate-200 rounded"></div>
+      <div className="bg-dark-secondary rounded-xl shadow-lg p-6 border border-dark-border max-w-3xl mx-auto">
+        <div className="animate-pulse space-y-4" aria-label="Loading health insights">
+          <div className="h-6 bg-dark-tertiary rounded w-1/3"></div>
+          <div className="h-20 bg-dark-tertiary rounded"></div>
         </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="bg-dark-secondary rounded-xl shadow-lg p-6 border border-dark-border max-w-3xl mx-auto space-y-4">
+        <div role="alert" className="bg-red-900/20 border border-red-800 rounded-lg p-4">
+          <p className="text-red-300 text-sm">Could not analyze health patterns: {loadError}</p>
+        </div>
+        <button
+          onClick={analyzeHealthPatterns}
+          className="px-4 py-2 bg-dark-accent text-white rounded-lg text-sm font-medium hover:bg-dark-accent-dark transition"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -342,6 +366,34 @@ export default function HealthAlerts() {
       </div>
 
       <div className="space-y-3">
+        {healthScore !== null && (
+          <div className="bg-dark-tertiary/40 rounded-lg p-4 border border-dark-border">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-dark-text-secondary">Sleep Health Score</span>
+              <span className={`text-2xl font-bold ${
+                healthScore >= 80 ? 'text-green-400' :
+                healthScore >= 60 ? 'text-yellow-400' : 'text-red-400'
+              }`}>
+                {healthScore}/100
+              </span>
+            </div>
+            <div className="w-full bg-dark-border rounded-full h-2.5">
+              <div
+                className={`h-2.5 rounded-full transition-all duration-1000 ${
+                  healthScore >= 80 ? 'bg-gradient-to-r from-green-600 to-green-400' :
+                  healthScore >= 60 ? 'bg-gradient-to-r from-yellow-600 to-yellow-400' :
+                  'bg-gradient-to-r from-red-600 to-red-400'
+                }`}
+                style={{ width: `${healthScore}%` }}
+              />
+            </div>
+            <p className="text-xs text-dark-text-muted mt-2">
+              Rule-based score from your last 4 weeks of sleep duration, quality,
+              awakenings, stress and caffeine — not a medical diagnosis.
+            </p>
+          </div>
+        )}
+
         {alerts.length === 0 ? (
           <div className="text-center py-6 text-dark-text-muted">
             <Info className="w-10 h-10 mx-auto mb-3 text-dark-text-muted" />

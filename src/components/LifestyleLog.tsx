@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
-import { Activity, Save, Calendar } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Activity, Save, Calendar, Trash2, History } from 'lucide-react';
 import { supabase, LifestyleLog } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { validateLifestyleLog, getErrorMessage } from '../lib/validation';
+import { ErrorBanner, EmptyState, FormMessage, LoadingSkeleton } from './ui';
 
 const EXERCISE_INTENSITIES = ['Low', 'Moderate', 'High'];
 const NOISE_LEVELS = ['Quiet', 'Moderate', 'Loud'];
@@ -10,9 +12,13 @@ const LIGHT_LEVELS = ['Dark', 'Dim', 'Bright'];
 export default function LifestyleLogCard() {
   const { user } = useAuth();
   const [logs, setLogs] = useState<LifestyleLog[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState('');
+  const [errors, setErrors] = useState<string[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [formData, setFormData] = useState({
@@ -29,17 +35,20 @@ export default function LifestyleLogCard() {
   });
 
   useEffect(() => {
-    loadLogs();
-  }, [user]);
+    void loadLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   useEffect(() => {
     loadLogForDate(selectedDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, logs]);
 
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     if (!user) return;
 
     setLoading(true);
+    setLoadError('');
     try {
       const { data, error } = await supabase
         .from('lifestyle_logs')
@@ -50,12 +59,13 @@ export default function LifestyleLogCard() {
 
       if (error) throw error;
       setLogs(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading logs:', error);
+      setLoadError(getErrorMessage(error, 'Could not load your lifestyle logs.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   const loadLogForDate = (date: string) => {
     const log = logs.find(l => l.log_date === date);
@@ -92,6 +102,18 @@ export default function LifestyleLogCard() {
     e.preventDefault();
     if (!user) return;
 
+    const validationErrors = validateLifestyleLog({
+      log_date: selectedDate,
+      stress_level: formData.stress_level,
+      exercise_duration: formData.exercise_duration,
+      caffeine_intake: formData.caffeine_intake,
+      alcohol_intake: formData.alcohol_intake,
+      screen_time: formData.screen_time,
+      room_temperature: formData.room_temperature,
+    });
+    setErrors(validationErrors);
+    if (validationErrors.length > 0) return;
+
     setSaving(true);
     setMessage('');
 
@@ -119,12 +141,48 @@ export default function LifestyleLogCard() {
 
       setMessage('Lifestyle log saved successfully!');
       await loadLogs();
-    } catch (error: any) {
-      setMessage(`Error: ${error.message}`);
+    } catch (error: unknown) {
+      setMessage(`Error: ${getErrorMessage(error, 'Could not save lifestyle log.')}`);
     } finally {
       setSaving(false);
     }
   };
+
+  const handleDelete = async () => {
+    if (!user) return;
+    if (!window.confirm(`Delete the lifestyle log for ${selectedDate}? This cannot be undone.`)) return;
+
+    setDeleting(true);
+    setMessage('');
+    try {
+      const { error } = await supabase
+        .from('lifestyle_logs')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('log_date', selectedDate);
+      if (error) throw error;
+      setMessage('Lifestyle log deleted.');
+      setFormData({
+        stress_level: '5',
+        exercise_duration: '0',
+        exercise_intensity: '',
+        caffeine_intake: '0',
+        alcohol_intake: '0',
+        screen_time: '0',
+        last_meal_time: '',
+        room_temperature: '',
+        noise_level: '',
+        light_level: ''
+      });
+      await loadLogs();
+    } catch (error: unknown) {
+      setMessage(`Error: ${getErrorMessage(error, 'Could not delete lifestyle log.')}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (loading) return <LoadingSkeleton lines={4} />;
 
   return (
     <div className="bg-dark-secondary rounded-xl shadow-lg p-4 border border-dark-border max-w-3xl mx-auto">
@@ -153,6 +211,21 @@ export default function LifestyleLogCard() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {loadError && (
+          <ErrorBanner message={`Could not load lifestyle logs: ${loadError}`} onRetry={loadLogs} />
+        )}
+
+        {errors.length > 0 && (
+          <div role="alert" className="bg-red-900/20 border border-red-800 rounded-lg p-3">
+            <p className="text-red-300 text-sm font-medium mb-1">Please fix the following:</p>
+            <ul className="list-disc list-inside text-red-300 text-sm space-y-0.5">
+              {errors.map((err) => (
+                <li key={err}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-dark-text-secondary mb-1">
             Daily Stress Level (1-10)
@@ -316,21 +389,71 @@ export default function LifestyleLogCard() {
           </div>
         </div>
 
-        {message && (
-          <div className={`p-3 rounded-lg ${message.includes('Error') ? 'bg-red-900/20 text-red-300 border border-red-800' : 'bg-green-900/20 text-green-300 border border-green-800'}`}>
-            {message}
-          </div>
-        )}
+        {message && <FormMessage message={message} />}
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 text-white font-semibold py-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 border border-green-500 hover:border-green-400"
-        >
-          <Save className="w-5 h-5" />
-          {saving ? 'Saving...' : 'Save Lifestyle Log'}
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 text-white font-semibold py-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 border border-green-500 hover:border-green-400"
+          >
+            <Save className="w-5 h-5" />
+            {saving ? 'Saving...' : 'Save Lifestyle Log'}
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting || saving}
+            className="sm:w-auto w-full px-4 py-3 rounded-lg font-semibold border border-red-800 text-red-300 hover:bg-red-900/30 disabled:opacity-50 transition flex items-center justify-center gap-2"
+          >
+            <Trash2 className="w-5 h-5" />
+            {deleting ? 'Deleting...' : 'Delete'}
+          </button>
+        </div>
       </form>
+
+      <div className="mt-6 border-t border-dark-border pt-4">
+        <button
+          type="button"
+          onClick={() => setShowHistory(!showHistory)}
+          className="flex items-center gap-2 text-sm font-medium text-dark-text-secondary hover:text-dark-text transition"
+          aria-expanded={showHistory}
+        >
+          <History className="w-4 h-4" />
+          {showHistory ? 'Hide recent entries' : `Show recent entries (${logs.length})`}
+        </button>
+        {showHistory && (
+          logs.length === 0 ? (
+            <EmptyState
+              title="No lifestyle logs yet"
+              hint="Save your first lifestyle log above to start tracking."
+            />
+          ) : (
+            <ul className="mt-3 space-y-2 max-h-64 overflow-y-auto pr-1">
+              {logs.map((log) => (
+                <li key={log.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(log.log_date)}
+                    className={`w-full text-left px-3 py-2 rounded-lg border transition text-sm flex items-center justify-between gap-2 ${
+                      log.log_date === selectedDate
+                        ? 'border-green-500 bg-green-900/20 text-dark-text'
+                        : 'border-dark-border bg-dark-tertiary/40 text-dark-text-secondary hover:text-dark-text hover:border-dark-border-light'
+                    }`}
+                  >
+                    <span className="font-medium">{log.log_date}</span>
+                    <span className="text-xs">
+                      {log.stress_level != null ? `stress ${log.stress_level}/10` : '—'}
+                      {log.exercise_duration ? ` · ${log.exercise_duration} min exercise` : ''}
+                      {log.caffeine_intake ? ` · ${log.caffeine_intake} caffeine` : ''}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        )}
+      </div>
     </div>
   );
 }

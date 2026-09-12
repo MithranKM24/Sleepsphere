@@ -1,14 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { User, Save } from 'lucide-react';
 import { supabase, UserProfile } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { validateProfile, getErrorMessage } from '../lib/validation';
+import { ErrorBanner, FormMessage, LoadingSkeleton } from './ui';
 
 export default function UserProfileCard() {
   const { user } = useAuth();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [errors, setErrors] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -21,13 +25,15 @@ export default function UserProfileCard() {
   });
 
   useEffect(() => {
-    loadProfile();
-  }, [user]);
+    void loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     if (!user) return;
 
     setLoading(true);
+    setLoadError('');
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -49,16 +55,21 @@ export default function UserProfileCard() {
           medications: data.medications || ''
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading profile:', error);
+      setLoadError(getErrorMessage(error, 'Failed to load profile (unknown error — check the browser console and your Supabase project).'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    const validationErrors = validateProfile({ name: formData.name, age: formData.age });
+    setErrors(validationErrors);
+    if (validationErrors.length > 0) return;
 
     setSaving(true);
     setMessage('');
@@ -66,8 +77,8 @@ export default function UserProfileCard() {
     try {
       const profileData = {
         id: user.id,
-        name: formData.name,
-        age: parseInt(formData.age),
+        name: formData.name.trim(),
+        age: parseInt(formData.age, 10),
         gender: formData.gender || null,
         occupation: formData.occupation || null,
         sleep_habits: formData.sleep_habits || null,
@@ -84,23 +95,15 @@ export default function UserProfileCard() {
 
       setMessage('Profile saved successfully!');
       await loadProfile();
-    } catch (error: any) {
-      setMessage(`Error: ${error.message}`);
+    } catch (error: unknown) {
+      setMessage(`Error: ${getErrorMessage(error, 'Could not save profile.')}`);
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return (
-      <div className="bg-dark-secondary rounded-xl shadow-lg p-6 border border-dark-border">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-dark-tertiary rounded w-1/3"></div>
-          <div className="h-10 bg-dark-tertiary rounded"></div>
-          <div className="h-10 bg-dark-tertiary rounded"></div>
-        </div>
-      </div>
-    );
+    return <LoadingSkeleton lines={4} />;
   }
 
   return (
@@ -112,7 +115,23 @@ export default function UserProfileCard() {
         <h2 className="text-xl font-bold text-dark-text">User Profile</h2>
       </div>
 
+      {loadError && (
+        <div className="mb-4">
+          <ErrorBanner message={loadError} onRetry={loadProfile} />
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-3">
+        {errors.length > 0 && (
+          <div role="alert" className="bg-red-900/20 border border-red-800 rounded-lg p-3">
+            <p className="text-red-300 text-sm font-medium mb-1">Please fix the following:</p>
+            <ul className="list-disc list-inside text-red-300 text-sm space-y-0.5">
+              {errors.map((err) => (
+                <li key={err}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-dark-text-secondary mb-1">
@@ -211,11 +230,7 @@ export default function UserProfileCard() {
           />
         </div>
 
-        {message && (
-          <div className={`p-3 rounded-lg ${message.includes('Error') ? 'bg-red-900/20 text-red-300 border border-red-800' : 'bg-green-900/20 text-green-300 border border-green-800'}`}>
-            {message}
-          </div>
-        )}
+        {message && <FormMessage message={message} />}
 
         <button
           type="submit"

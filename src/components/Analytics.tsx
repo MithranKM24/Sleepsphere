@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Moon, Activity, Clock, Zap, Brain, Heart, Target, AlertCircle, CheckCircle, Info, Maximize2, Minimize2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { BarChart3, TrendingUp, Moon, Clock, Zap, Brain, Heart, Target, AlertCircle, CheckCircle, Info, Maximize2, Minimize2 } from 'lucide-react';
 import { supabase, SleepLog, LifestyleLog } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { getErrorMessage } from '../lib/validation';
 import LineGraph from './LineGraph';
 import PieChart from './PieChart';
+
+type MetricId = 'duration' | 'quality' | 'dreams' | 'stress';
 
 interface AnalyticsData {
   sleepLogs: SleepLog[];
@@ -22,21 +25,24 @@ export default function Analytics() {
   const { user } = useAuth();
   const [data, setData] = useState<AnalyticsData>({ sleepLogs: [], lifestyleLogs: [] });
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState<'week' | 'month'>('week');
-  const [selectedMetric, setSelectedMetric] = useState<'duration' | 'quality' | 'dreams' | 'stress'>('duration');
+  const [loadError, setLoadError] = useState('');
+  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter'>('week');
+  const [selectedMetric, setSelectedMetric] = useState<MetricId>('duration');
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
   const [chartView, setChartView] = useState<'grid' | 'detailed'>('grid');
 
   useEffect(() => {
-    loadAnalyticsData();
-  }, [user, timeRange]);
+    void loadAnalyticsData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, timeRange]);
 
-  const loadAnalyticsData = async () => {
+  const loadAnalyticsData = useCallback(async () => {
     if (!user) return;
 
     setLoading(true);
+    setLoadError('');
     try {
-      const daysBack = timeRange === 'week' ? 7 : 30;
+      const daysBack = timeRange === 'week' ? 7 : timeRange === 'month' ? 30 : 90;
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - daysBack);
 
@@ -62,12 +68,13 @@ export default function Analytics() {
         sleepLogs: sleepResult.data || [],
         lifestyleLogs: lifestyleResult.data || []
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading analytics:', error);
+      setLoadError(getErrorMessage(error, 'Could not load analytics.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, timeRange]);
 
   const calculateAverages = () => {
     const { sleepLogs, lifestyleLogs } = data;
@@ -180,16 +187,42 @@ export default function Analytics() {
   const { avgSleepDuration, avgSleepQuality, avgStress, avgDreamRecall, dreamMoods } = calculateAverages();
   const insights = generateInsights();
 
-  const maxDuration = Math.max(...data.sleepLogs.map(log => log.total_hours || 0), 1);
-  const maxQuality = 10;
-
   if (loading) {
     return (
       <div className="bg-dark-secondary rounded-xl shadow-lg p-6 border border-dark-border">
-        <div className="animate-pulse space-y-4">
+        <div className="animate-pulse space-y-4" aria-label="Loading analytics">
           <div className="h-6 bg-dark-tertiary rounded w-1/3"></div>
           <div className="h-32 bg-dark-tertiary rounded"></div>
         </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="bg-dark-secondary rounded-xl shadow-lg p-6 border border-dark-border space-y-4">
+        <div role="alert" className="bg-red-900/20 border border-red-800 rounded-lg p-4">
+          <p className="text-red-300 text-sm">Could not load analytics: {loadError}</p>
+        </div>
+        <button
+          onClick={loadAnalyticsData}
+          className="px-4 py-2 bg-dark-accent text-white rounded-lg text-sm font-medium hover:bg-dark-accent-dark transition"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (data.sleepLogs.length === 0 && data.lifestyleLogs.length === 0) {
+    return (
+      <div className="bg-dark-secondary rounded-xl shadow-lg p-8 border border-dark-border text-center">
+        <Moon className="w-10 h-10 text-dark-text-muted mx-auto mb-3" />
+        <h2 className="text-xl font-bold text-dark-text mb-2">No data yet</h2>
+        <p className="text-dark-text-secondary text-sm max-w-md mx-auto">
+          Log a few nights of sleep (Sleep Log tab) and daily habits (Lifestyle tab) and
+          your trends, averages and personalized insights will appear here.
+        </p>
       </div>
     );
   }
@@ -223,13 +256,23 @@ export default function Analytics() {
             </button>
             <button
               onClick={() => setTimeRange('month')}
-              className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+              className={`px-3 py-2 sm:px-4 rounded-lg text-sm font-medium transition-all duration-200 ${
                 timeRange === 'month'
                   ? 'bg-dark-accent text-white border border-dark-accent-light'
                   : 'bg-dark-tertiary text-dark-text-secondary hover:bg-dark-border border border-dark-border'
               }`}
             >
               Month
+            </button>
+            <button
+              onClick={() => setTimeRange('quarter')}
+              className={`px-3 py-2 sm:px-4 rounded-lg text-sm font-medium transition-all duration-200 ${
+                timeRange === 'quarter'
+                  ? 'bg-dark-accent text-white border border-dark-accent-light'
+                  : 'bg-dark-tertiary text-dark-text-secondary hover:bg-dark-border border border-dark-border'
+              }`}
+            >
+              3 Months
             </button>
           </div>
         </div>
@@ -330,7 +373,7 @@ export default function Analytics() {
                   ].map((metric) => (
                     <button
                       key={metric.id}
-                      onClick={() => setSelectedMetric(metric.id as any)}
+                      onClick={() => setSelectedMetric(metric.id as MetricId)}
                       className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200 ${
                         selectedMetric === metric.id
                           ? 'bg-dark-accent text-white'
@@ -378,7 +421,7 @@ export default function Analytics() {
                     ].map((metric) => (
                       <button
                         key={metric.id}
-                        onClick={() => setSelectedMetric(metric.id as any)}
+                        onClick={() => setSelectedMetric(metric.id as MetricId)}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                           selectedMetric === metric.id
                             ? 'bg-dark-accent text-white border border-dark-accent-light'

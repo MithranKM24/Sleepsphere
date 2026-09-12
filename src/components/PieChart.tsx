@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 interface PieChartProps {
   data: Record<string, number>;
@@ -140,7 +140,7 @@ export default function PieChart({
         />
 
         {/* Pie slices */}
-        {slices.map((slice, index) => {
+        {slices.map((slice) => {
           const isHovered = hoveredSlice?.label === slice.label;
           const scale = isHovered ? 1.05 : 1;
           const offsetX = isHovered ? (slice.color === hoveredSlice?.color ? 5 : 0) : 0;
@@ -211,7 +211,7 @@ export default function PieChart({
 
       {/* Legend */}
       <div className="mt-4 space-y-2">
-        {slices.map((slice, index) => (
+        {slices.map((slice) => (
           <div
             key={slice.label}
             className="flex items-center gap-2 text-sm"
